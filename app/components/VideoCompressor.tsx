@@ -65,15 +65,64 @@ function makeId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+const VIDEO_EXTENSIONS = [
+  ".mp4",
+  ".mov",
+  ".m4v",
+  ".webm",
+  ".mkv",
+  ".avi",
+  ".3gp",
+  ".3g2",
+  ".wmv",
+  ".flv",
+  ".ogv",
+  ".mpg",
+  ".mpeg",
+  ".ts",
+];
+
+// Mobile browsers — iOS Safari in particular, when picking from Photos —
+// frequently report an empty or generic file.type for videos (especially
+// HEVC-encoded .MOV files). Falling back to the file extension keeps those
+// from being silently dropped.
+function looksLikeVideo(file: File) {
+  if (file.type.startsWith("video/")) return true;
+  if (file.type) return false;
+  const name = file.name.toLowerCase();
+  return VIDEO_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
 function getVideoDuration(file: File): Promise<number | null> {
   return new Promise((resolve) => {
+    // iOS Safari can be unreliable about firing loadedmetadata on a video
+    // element that's never attached to the document, so mount it off-screen
+    // instead of leaving it detached. A timeout guards against it never
+    // firing at all — duration is a nice-to-have, not a blocker for upload.
     const video = document.createElement("video");
     video.preload = "metadata";
-    video.onloadedmetadata = () => {
+    video.muted = true;
+    video.playsInline = true;
+    video.style.position = "fixed";
+    video.style.width = "1px";
+    video.style.height = "1px";
+    video.style.opacity = "0";
+    video.style.pointerEvents = "none";
+    document.body.appendChild(video);
+
+    let settled = false;
+    const finish = (value: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       URL.revokeObjectURL(video.src);
-      resolve(Number.isFinite(video.duration) ? video.duration : null);
+      video.remove();
+      resolve(value);
     };
-    video.onerror = () => resolve(null);
+    const timer = setTimeout(() => finish(null), 8000);
+
+    video.onloadedmetadata = () => finish(Number.isFinite(video.duration) ? video.duration : null);
+    video.onerror = () => finish(null);
     video.src = URL.createObjectURL(file);
   });
 }
@@ -242,20 +291,28 @@ export default function VideoCompressor() {
   }, [coreReady]);
 
   const addFiles = (files: FileList | File[] | null) => {
-    if (!files) return;
-    const items: QueueItem[] = Array.from(files)
-      .filter((f) => f.type.startsWith("video/"))
-      .map((f) => ({
-        id: makeId(),
-        file: f,
-        status: "queued",
-        progress: 0,
-        duration: null,
-        trimStart: null,
-        trimEnd: null,
-        trimOpen: false,
-      }));
-    if (items.length === 0) return;
+    if (!files || files.length === 0) return;
+    const all = Array.from(files);
+    const accepted = all.filter(looksLikeVideo);
+    const items: QueueItem[] = accepted.map((f) => ({
+      id: makeId(),
+      file: f,
+      status: "queued",
+      progress: 0,
+      duration: null,
+      trimStart: null,
+      trimEnd: null,
+      trimOpen: false,
+    }));
+    if (items.length === 0) {
+      setLoadError(
+        all.length === 1
+          ? `"${all[0].name}" doesn't look like a supported video file.`
+          : "None of the selected files look like supported video files."
+      );
+      return;
+    }
+    setLoadError(null);
     setQueueSynced((q) => [...q, ...items]);
     items.forEach((item) => {
       getVideoDuration(item.file).then((duration) => {
