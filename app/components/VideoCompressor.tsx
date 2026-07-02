@@ -238,7 +238,6 @@ export default function VideoCompressor() {
 
   const queuedCount = queue.filter((it) => it.status === "queued").length;
   const hasQueued = queuedCount > 0;
-  const currentlyCompressing = queue.find((it) => it.status === "compressing");
 
   return (
     <div className="w-full max-w-xl mx-auto bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_10px_-2px_rgba(0,0,0,0.3)] p-6 flex flex-col gap-5 animate-fade-in-up">
@@ -444,9 +443,7 @@ export default function VideoCompressor() {
           {loadingCore
             ? "Loading engine…"
             : batchRunning
-              ? currentlyCompressing
-                ? `Compressing ${currentlyCompressing.file.name}…`
-                : "Compressing…"
+              ? "Compressing…"
               : queuedCount > 0
                 ? `Compress ${queuedCount} file${queuedCount > 1 ? "s" : ""}`
                 : "Compress all"}
