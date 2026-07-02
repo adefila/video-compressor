@@ -660,11 +660,13 @@ export default function VideoCompressor() {
         >
           <UploadIcon />
         </div>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300 text-center px-6">
           <span className="font-medium underline underline-offset-2">Click to upload</span> or drag
           and drop
         </p>
-        <p className="text-xs text-zinc-400">Add as many videos as you like — they'll queue up</p>
+        <p className="text-xs text-zinc-400 text-center px-6">
+          Add as many videos as you like — they'll queue up
+        </p>
       </label>
 
       {loadError && (
