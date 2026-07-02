@@ -82,15 +82,50 @@ const VIDEO_EXTENSIONS = [
   ".ts",
 ];
 
-// Mobile browsers — iOS Safari in particular, when picking from Photos —
-// frequently report an empty or generic file.type for videos (especially
-// HEVC-encoded .MOV files). Falling back to the file extension keeps those
-// from being silently dropped.
+// Extensions/MIME prefixes we can be confident are NOT a video, used to
+// reject obviously-wrong picks (a photo, a PDF, etc.) without needing a
+// positive video match.
+const NON_VIDEO_MIME_PREFIXES = ["image/", "audio/", "text/", "font/"];
+const NON_VIDEO_EXTENSIONS = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".heic",
+  ".heif",
+  ".webp",
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".txt",
+  ".zip",
+  ".mp3",
+  ".m4a",
+  ".wav",
+];
+
+// Mobile pickers are unreliable about file.type for videos: iOS Safari's
+// Photos-library picker (as opposed to the Files app) very commonly reports
+// an empty type, or a generic "application/octet-stream", for large or
+// HEVC-encoded videos — the browser hasn't sniffed the container yet. If we
+// only trust an exact "video/*" match, real videos get silently dropped
+// with no feedback, which is worse than occasionally letting a non-video
+// through (ffmpeg will fail it with a visible, retryable error instead).
+// So: reject only what we can positively identify as NOT a video; accept
+// everything else.
 function looksLikeVideo(file: File) {
-  if (file.type.startsWith("video/")) return true;
-  if (file.type) return false;
+  const type = file.type.toLowerCase();
   const name = file.name.toLowerCase();
-  return VIDEO_EXTENSIONS.some((ext) => name.endsWith(ext));
+
+  if (type.startsWith("video/")) return true;
+  if (NON_VIDEO_MIME_PREFIXES.some((p) => type.startsWith(p))) return false;
+  if (NON_VIDEO_EXTENSIONS.some((ext) => name.endsWith(ext))) return false;
+  if (VIDEO_EXTENSIONS.some((ext) => name.endsWith(ext))) return true;
+
+  // Unknown/generic type (e.g. "", "application/octet-stream") with an
+  // unrecognized or missing extension — most common for mobile
+  // camera-roll picks. Let it through rather than silently dropping it.
+  return type === "" || type === "application/octet-stream";
 }
 
 function getVideoDuration(file: File): Promise<number | null> {
@@ -645,7 +680,7 @@ export default function VideoCompressor() {
       >
         <input
           type="file"
-          accept="video/*"
+          accept="video/*,.mp4,.mov,.m4v,.avi,.3gp,.webm,.mkv"
           multiple
           className="hidden"
           onChange={(e) => {
